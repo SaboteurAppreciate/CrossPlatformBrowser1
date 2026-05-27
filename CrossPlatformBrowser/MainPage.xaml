@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CrossPlatformBrowser.MainPage"
+             Shell.NavBarIsVisible="False" 
+             BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
+
+    <Grid RowDefinitions="45, Auto, *">
+
+        <!-- 1. ПАНЕЛЬ ВКЛАДОК -->
+        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" BackgroundColor="{AppThemeBinding Light=#E0E0E0, Dark=#2D2D2D}">
+            <ScrollView Grid.Column="0" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                <HorizontalStackLayout x:Name="TabsLayout" Spacing="2" Padding="5,5,5,0" />
+            </ScrollView>
+
+            <Button Grid.Column="1" Text="+" WidthRequest="40" HeightRequest="35" 
+                    BackgroundColor="Transparent" 
+                    TextColor="{AppThemeBinding Light=Black, Dark=White}" 
+                    FontSize="24" 
+                    FontAttributes="Bold" 
+                    Padding="0" Margin="0,5,5,0" 
+                    Clicked="OnNewTabButtonClicked" />
+        </Grid>
+
+        <!-- 2. АДРЕСНАЯ СТРОКА -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto, *, Auto" Padding="5" BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
+            <HorizontalStackLayout Grid.Column="0" Spacing="2">
+                <Button Text="◀" WidthRequest="40" Clicked="OnBackButtonClicked" />
+                <Button Text="▶" WidthRequest="40" Clicked="OnForwardButtonClicked" />
+                <Button Text="↻" WidthRequest="40" Clicked="OnReloadButtonClicked" />
+                <Button Text="⋮" WidthRequest="40" FontAttributes="Bold" Clicked="OnMenuButtonClicked" />
+            </HorizontalStackLayout>
+
+            <Entry Grid.Column="1" x:Name="UrlEntry" Placeholder="Введите адрес или запрос..." ReturnType="Go" Completed="OnGoButtonClicked" Margin="5,0" />
+            <Button Grid.Column="2" Text="Go" WidthRequest="50" Clicked="OnGoButtonClicked" />
+        </Grid>
+
+        <!-- 3. ОСНОВНАЯ ОБЛАСТЬ (ВЫВЕСКА И САЙТЫ) -->
+        <Grid Grid.Row="2">
+            <!-- Вывеска -->
+            <VerticalStackLayout x:Name="StartPageLogo" 
+                                 VerticalOptions="Center" 
+                                 HorizontalOptions="Center"
+                                 Spacing="10">
+                <Label Text="ASTRA" 
+                       FontSize="80" 
+                       FontAttributes="Bold" 
+                       TextColor="#8A2BE2" 
+                       HorizontalOptions="Center"
+                       CharacterSpacing="5" />
+                
+            </VerticalStackLayout>
+
+            <!-- Контейнер для сайтов -->
+            <Grid x:Name="WebViewsContainer">
+            </Grid>
+        </Grid>
+
+    </Grid>
+</ContentPage>
