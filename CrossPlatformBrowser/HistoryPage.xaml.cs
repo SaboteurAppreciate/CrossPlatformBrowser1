@@ -25,16 +25,16 @@ namespace CrossPlatformBrowser
 
         private async Task LoadHistoryAsync()
         {
+            HistoryListView.ItemsSource = Array.Empty<HistoryItem>();
+
             if (_isIncognito)
             {
-                HistoryListView.ItemsSource = Array.Empty<HistoryItem>();
                 InfoLabel.Text = "В режиме инкогнито серверная история не синхронизируется.";
                 return;
             }
 
             if (!_userId.HasValue)
             {
-                HistoryListView.ItemsSource = Array.Empty<HistoryItem>();
                 InfoLabel.Text = "Войдите в аккаунт, чтобы просматривать серверную историю.";
                 return;
             }

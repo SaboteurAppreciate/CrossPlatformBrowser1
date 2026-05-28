@@ -26,6 +26,7 @@ namespace CrossPlatformBrowser
 
             var handler = new HttpClientHandler();
 #if DEBUG
+            // В DEBUG разрешаем dev-сертификат только для localhost, остальные хосты проходят стандартную валидацию.
             handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
                 message?.RequestUri?.Host == "localhost" || errors == System.Net.Security.SslPolicyErrors.None;
 #endif
@@ -199,7 +200,10 @@ namespace CrossPlatformBrowser
         {
             if (input.Contains('.') && !input.Contains(' '))
             {
-                return input.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? input : $"https://{input}";
+                return input.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                       input.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    ? input
+                    : $"https://{input}";
             }
 
             int engine = Preferences.Default.Get("SearchEngine", 0);
@@ -239,7 +243,7 @@ namespace CrossPlatformBrowser
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(e.Url) || e.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || e.Url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            if (ShouldSkipUrl(e.Url))
             {
                 return;
             }
@@ -360,11 +364,18 @@ namespace CrossPlatformBrowser
             return null;
         }
 
+        private static bool ShouldSkipUrl(string? url)
+        {
+            return string.IsNullOrWhiteSpace(url)
+                || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("file://", StringComparison.OrdinalIgnoreCase);
+        }
+
         private async void OnBrowserNavigated(object sender, WebNavigatedEventArgs e)
         {
             if (_currentTab != null && sender == _currentTab.Browser)
             {
-                if (string.IsNullOrWhiteSpace(e.Url) || e.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || e.Url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                if (ShouldSkipUrl(e.Url))
                 {
                     UrlEntry.Text = string.Empty;
                     _currentTab.TitleLabel.Text = "Новая вкладка";
@@ -477,7 +488,7 @@ namespace CrossPlatformBrowser
                 return;
             }
 
-            string password = await DisplayPromptAsync("Регистрация", "Введите пароль:", "ОК", "Отмена", "", maxLength: 100, keyboard: Keyboard.Text);
+            string password = await DisplayPromptAsync("Регистрация", "Введите пароль:", "ОК", "Отмена", "", maxLength: 100, keyboard: Keyboard.Default);
             if (string.IsNullOrWhiteSpace(password))
             {
                 return;
@@ -510,7 +521,7 @@ namespace CrossPlatformBrowser
                 return;
             }
 
-            string password = await DisplayPromptAsync("Вход", "Введите пароль:", "ОК", "Отмена", "", maxLength: 100, keyboard: Keyboard.Text);
+            string password = await DisplayPromptAsync("Вход", "Введите пароль:", "ОК", "Отмена", "", maxLength: 100, keyboard: Keyboard.Default);
             if (string.IsNullOrWhiteSpace(password))
             {
                 return;
