@@ -10,32 +10,26 @@ namespace CrossPlatformBrowser
 
         private void LoadSettings()
         {
-            // Загружаем сохраненные настройки (или ставим по умолчанию)
-            ThemePicker.SelectedIndex = Preferences.Default.Get("AppTheme", 0);
+            HomePageEntry.Text = Preferences.Default.Get("HomePage", string.Empty);
             SearchEnginePicker.SelectedIndex = Preferences.Default.Get("SearchEngine", 0);
+            DarkModeSwitch.IsToggled = Preferences.Default.Get("DarkMode", false);
         }
 
-        private void OnThemeChanged(object sender, EventArgs e)
+        private void SaveSettings()
         {
-            int themeIndex = ThemePicker.SelectedIndex;
-            Preferences.Default.Set("AppTheme", themeIndex); // Сохраняем выбор
+            Preferences.Default.Set("HomePage", HomePageEntry.Text?.Trim() ?? string.Empty);
+            Preferences.Default.Set("SearchEngine", SearchEnginePicker.SelectedIndex < 0 ? 0 : SearchEnginePicker.SelectedIndex);
+            Preferences.Default.Set("DarkMode", DarkModeSwitch.IsToggled);
 
-            // Мгновенно меняем тему приложения
-            Application.Current.UserAppTheme = themeIndex switch
+            if (Application.Current is not null)
             {
-                1 => AppTheme.Light,
-                2 => AppTheme.Dark,
-                _ => AppTheme.Unspecified
-            };
-        }
-
-        private void OnSearchEngineChanged(object sender, EventArgs e)
-        {
-            Preferences.Default.Set("SearchEngine", SearchEnginePicker.SelectedIndex); // Сохраняем поисковик
+                Application.Current.UserAppTheme = DarkModeSwitch.IsToggled ? AppTheme.Dark : AppTheme.Light;
+            }
         }
 
         private async void OnCloseButtonClicked(object sender, EventArgs e)
         {
+            SaveSettings();
             await Navigation.PopModalAsync();
         }
     }

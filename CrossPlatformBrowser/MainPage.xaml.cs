@@ -1,4 +1,3 @@
-﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
@@ -6,49 +5,52 @@ namespace CrossPlatformBrowser
 {
     public partial class MainPage : ContentPage
     {
-        // ⚠️ ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ ИЗ DEV TUNNELS ⚠️
-        private const string ApiBaseUrl = "https://4z8t5ldz-7052.jpe1.devtunnels.ms";
+#if ANDROID
+        private const string ApiBaseUrl = "http://10.0.2.2:7052";
+#else
+        private const string ApiBaseUrl = "https://localhost:7052";
+#endif
+
         private readonly HttpClient _httpClient;
 
-        // Списки для хранения наших вкладок
-        private List<TabItem> _tabs = new List<TabItem>();
-        private TabItem _currentTab;
+        private readonly List<TabItem> _tabs = [];
+        private TabItem? _currentTab;
+
+        private int? _currentUserId;
+        private string _currentUsername = "Гость";
+        private bool _isIncognito;
 
         public MainPage()
         {
             InitializeComponent();
 
-            _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("X-Tunnel-Skip-AntiPhishing-Page", "true");
-
-            // При запуске приложения открываем пустую вкладку, чтобы показать вывеску ASTRA
-            //Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(100), () =>
-            //{
-            //    AddNewTab(""); // Пустая строка означает стартовую страницу
-            //});
+            var handler = new HttpClientHandler();
+#if DEBUG
+            // В DEBUG разрешаем dev-сертификат только для localhost, остальные хосты проходят стандартную валидацию.
+            handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
+                message?.RequestUri?.Host == "localhost" || errors == System.Net.Security.SslPolicyErrors.None;
+#endif
+            _httpClient = new HttpClient(handler);
         }
+
         protected override void OnAppearing()
         {
             base.OnAppearing();
 
-            // Проверяем, что вкладок еще нет (чтобы не дублировать при сворачивании приложения)
             if (_tabs.Count == 0)
             {
-                AddNewTab(""); // Добавляем пустую стартовую вкладку с вывеской
+                AddNewTab(string.Empty);
             }
         }
 
-        // --- ЛОГИКА СОЗДАНИЯ ВКЛАДКИ ---
         private void AddNewTab(string url)
         {
-            var webView = new WebView { IsVisible = false };
-
-            // БЕЗОПАСНАЯ ПРОВЕРКА: если адреса нет, грузим системную пустую страницу
-            if (string.IsNullOrEmpty(url))
+            var webView = new WebView
             {
-                webView.Source = "about:blank";
-            }
-            else
+                IsVisible = !string.IsNullOrWhiteSpace(url)
+            };
+
+            if (!string.IsNullOrWhiteSpace(url))
             {
                 webView.Source = url;
             }
@@ -58,7 +60,7 @@ namespace CrossPlatformBrowser
 
             var titleLabel = new Label
             {
-                Text = string.IsNullOrEmpty(url) ? "Новая вкладка" : "Загрузка...",
+                Text = string.IsNullOrWhiteSpace(url) ? "Новая вкладка" : "Загрузка...",
                 VerticalOptions = LayoutOptions.Center,
                 TextColor = Colors.Black,
                 LineBreakMode = LineBreakMode.TailTruncation,
@@ -95,10 +97,10 @@ namespace CrossPlatformBrowser
 
             var tabItem = new TabItem { Browser = webView, TabContainer = tabFrame, TitleLabel = titleLabel };
 
-            closeBtn.Clicked += (s, e) => CloseTab(tabItem);
+            closeBtn.Clicked += (_, _) => CloseTab(tabItem);
 
             var tapGesture = new TapGestureRecognizer();
-            tapGesture.Tapped += (s, e) => SwitchToTab(tabItem);
+            tapGesture.Tapped += (_, _) => SwitchToTab(tabItem);
             tabFrame.GestureRecognizers.Add(tapGesture);
 
             TabsLayout.Children.Add(tabFrame);
@@ -108,7 +110,6 @@ namespace CrossPlatformBrowser
             SwitchToTab(tabItem);
         }
 
-        // --- ЛОГИКА ЗАКРЫТИЯ ВКЛАДКИ ---
         private void CloseTab(TabItem tab)
         {
             TabsLayout.Children.Remove(tab.TabContainer);
@@ -123,92 +124,111 @@ namespace CrossPlatformBrowser
                 }
                 else
                 {
-                    // Если закрыли вообще все вкладки — открываем новую стартовую страницу
-                    AddNewTab("");
+                    AddNewTab(string.Empty);
                 }
             }
         }
 
-        // --- ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК И ВЫВЕСКИ ---
         private void SwitchToTab(TabItem tab)
         {
-            // 1. Сначала прячем ВСЕ браузеры и красим вкладки в серый
-            foreach (var t in _tabs)
+            foreach (var current in _tabs)
             {
-                t.Browser.IsVisible = false;
-                t.TabContainer.BackgroundColor = Colors.LightGray;
+                current.Browser.IsVisible = false;
+                current.TabContainer.BackgroundColor = Colors.LightGray;
             }
 
-            // 2. Делаем активную вкладку белой
             tab.TabContainer.BackgroundColor = Colors.White;
             _currentTab = tab;
 
-            // Получаем текущий адрес
-            string currentUrl = (tab.Browser.Source as UrlWebViewSource)?.Url;
+            string currentUrl = (tab.Browser.Source as UrlWebViewSource)?.Url ?? string.Empty;
 
-            // 3. ГЛАВНАЯ ЛОГИКА: Что показывать?
-            if (string.IsNullOrEmpty(currentUrl) || currentUrl == "about:blank")
+            if (string.IsNullOrWhiteSpace(currentUrl))
             {
-                // Если страница пустая:
-                StartPageLogo.IsVisible = true;   // ПОКАЗЫВАЕМ ВЫВЕСКУ ASTRA
-                tab.Browser.IsVisible = false;    // ПРЯЧЕМ БЕЛЫЙ ЭКРАН БРАУЗЕРА
-                UrlEntry.Text = "";               // Очищаем адресную строку
+                StartPageLogo.IsVisible = true;
+                tab.Browser.IsVisible = false;
+                UrlEntry.Text = string.Empty;
             }
             else
             {
-                // Если есть какой-то сайт:
-                StartPageLogo.IsVisible = false;  // ПРЯЧЕМ ВЫВЕСКУ
-                tab.Browser.IsVisible = true;     // ПОКАЗЫВАЕМ БРАУЗЕР С САЙТОМ
+                StartPageLogo.IsVisible = false;
+                tab.Browser.IsVisible = true;
                 UrlEntry.Text = currentUrl;
             }
         }
 
         private void OnNewTabButtonClicked(object sender, EventArgs e)
         {
-            AddNewTab(""); // Открываем новую пустую вкладку
+            AddNewTab(string.Empty);
         }
 
-        // --- КНОПКИ НАВИГАЦИИ И ПОИСКА ---
-        private void OnGoButtonClicked(object sender, EventArgs e)
+        private async void OnGoButtonClicked(object sender, EventArgs e)
         {
-            if (_currentTab != null && !string.IsNullOrWhiteSpace(UrlEntry.Text))
+            if (_currentTab == null)
             {
-                // 1. Прячем вывеску ASTRA
-                StartPageLogo.IsVisible = false;
-
-                // 2. ВОТ ЭТА СТРОКА: ПОКАЗЫВАЕМ САМ БРАУЗЕР ОБРАТНО!
-                _currentTab.Browser.IsVisible = true;
-
-                string input = UrlEntry.Text.Trim();
-                string url;
-
-                if (input.Contains(".") && !input.Contains(" "))
-                {
-                    url = input.StartsWith("http") ? input : "https://" + input;
-                }
-                else
-                {
-                    int engine = Preferences.Default.Get("SearchEngine", 0);
-                    url = engine switch
-                    {
-                        1 => $"https://yandex.ru/search/?text={Uri.EscapeDataString(input)}",
-                        2 => $"https://www.bing.com/search?q={Uri.EscapeDataString(input)}",
-                        _ => $"https://www.google.com/search?q={Uri.EscapeDataString(input)}"
-                    };
-                }
-
-                _currentTab.Browser.Source = url;
+                return;
             }
+
+            string input = UrlEntry.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                string homePage = Preferences.Default.Get("HomePage", string.Empty);
+                if (string.IsNullOrWhiteSpace(homePage))
+                {
+                    _currentTab.Browser.Source = null;
+                    SwitchToTab(_currentTab);
+                    return;
+                }
+
+                input = homePage.Trim();
+            }
+
+            string url = BuildTargetUrl(input);
+
+            var siteRuleResult = await CheckSiteRuleAsync(url);
+            if (siteRuleResult.IsBlocked)
+            {
+                await DisplayAlert("Доступ запрещен", siteRuleResult.Message, "ОК");
+                return;
+            }
+
+            StartPageLogo.IsVisible = false;
+            _currentTab.Browser.IsVisible = true;
+            _currentTab.Browser.Source = url;
+        }
+
+        private static string BuildTargetUrl(string input)
+        {
+            if (input.Contains('.') && !input.Contains(' '))
+            {
+                return input.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                       input.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    ? input
+                    : $"https://{input}";
+            }
+
+            int engine = Preferences.Default.Get("SearchEngine", 0);
+            return engine switch
+            {
+                1 => $"https://yandex.ru/search/?text={Uri.EscapeDataString(input)}",
+                2 => $"https://www.bing.com/search?q={Uri.EscapeDataString(input)}",
+                _ => $"https://www.google.com/search?q={Uri.EscapeDataString(input)}"
+            };
         }
 
         private void OnBackButtonClicked(object sender, EventArgs e)
         {
-            if (_currentTab?.Browser.CanGoBack == true) _currentTab.Browser.GoBack();
+            if (_currentTab?.Browser.CanGoBack == true)
+            {
+                _currentTab.Browser.GoBack();
+            }
         }
 
         private void OnForwardButtonClicked(object sender, EventArgs e)
         {
-            if (_currentTab?.Browser.CanGoForward == true) _currentTab.Browser.GoForward();
+            if (_currentTab?.Browser.CanGoForward == true)
+            {
+                _currentTab.Browser.GoForward();
+            }
         }
 
         private void OnReloadButtonClicked(object sender, EventArgs e)
@@ -216,78 +236,203 @@ namespace CrossPlatformBrowser
             _currentTab?.Browser.Reload();
         }
 
-        // --- СОБЫТИЯ БРАУЗЕРА (ЗАГРУЗКА И ИСТОРИЯ) ---
-
-        // Срабатывает в момент НАЧАЛА загрузки сайта
-        private void OnBrowserNavigating(object sender, WebNavigatingEventArgs e)
+        private async void OnBrowserNavigating(object sender, WebNavigatingEventArgs e)
         {
-            if (_currentTab != null && sender == _currentTab.Browser)
+            if (_currentTab == null || sender != _currentTab.Browser)
             {
-                /*StartPageLogo.IsVisible = false;*/ // Дополнительная подстраховка: прячем логотип
+                return;
+            }
+
+            if (ShouldSkipUrl(e.Url))
+            {
+                return;
+            }
+
+            var siteRuleResult = await CheckSiteRuleAsync(e.Url);
+            if (siteRuleResult.IsBlocked)
+            {
+                e.Cancel = true;
+                await DisplayAlert("Доступ запрещен", siteRuleResult.Message, "ОК");
             }
         }
 
-        // Срабатывает когда сайт УЖЕ ЗАГРУЗИЛСЯ
+        private async Task<SiteRuleResult> CheckSiteRuleAsync(string url)
+        {
+            var userId = _currentUserId.GetValueOrDefault();
+            var checkUrl = $"{ApiBaseUrl}/api/siterules/check?url={Uri.EscapeDataString(url)}&userId={userId}";
+
+            try
+            {
+                var response = await _httpClient.GetAsync(checkUrl);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return SiteRuleResult.Allowed();
+                }
+
+                string json = await response.Content.ReadAsStringAsync();
+                return ParseSiteRuleResult(json);
+            }
+            catch
+            {
+                return SiteRuleResult.Allowed();
+            }
+        }
+
+        private static SiteRuleResult ParseSiteRuleResult(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return SiteRuleResult.Allowed();
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind == JsonValueKind.False)
+                {
+                    return SiteRuleResult.Blocked("Переход на этот сайт заблокирован правилами.");
+                }
+
+                if (document.RootElement.ValueKind == JsonValueKind.True)
+                {
+                    return SiteRuleResult.Allowed();
+                }
+
+                if (document.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    bool? isBlocked = GetBoolean(document.RootElement, "isBlocked", "blocked");
+                    bool? isAllowed = GetBoolean(document.RootElement, "isAllowed", "allowed");
+                    string message = GetString(document.RootElement, "message", "reason") ?? "Переход на этот сайт заблокирован правилами.";
+
+                    if (isBlocked == true || isAllowed == false)
+                    {
+                        return SiteRuleResult.Blocked(message);
+                    }
+                }
+            }
+            catch
+            {
+                return SiteRuleResult.Allowed();
+            }
+
+            return SiteRuleResult.Allowed();
+        }
+
+        private static bool? GetBoolean(JsonElement element, params string[] names)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (property.Value.ValueKind == JsonValueKind.True)
+                {
+                    return true;
+                }
+
+                if (property.Value.ValueKind == JsonValueKind.False)
+                {
+                    return false;
+                }
+
+                if (property.Value.ValueKind == JsonValueKind.String && bool.TryParse(property.Value.GetString(), out var parsed))
+                {
+                    return parsed;
+                }
+            }
+
+            return null;
+        }
+
+        private static string? GetString(JsonElement element, params string[] names)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (property.Value.ValueKind == JsonValueKind.String)
+                {
+                    return property.Value.GetString();
+                }
+            }
+
+            return null;
+        }
+
+        private static bool ShouldSkipUrl(string? url)
+        {
+            return string.IsNullOrWhiteSpace(url)
+                || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("file://", StringComparison.OrdinalIgnoreCase);
+        }
+
         private async void OnBrowserNavigated(object sender, WebNavigatedEventArgs e)
         {
             if (_currentTab != null && sender == _currentTab.Browser)
             {
-                // 🔴 УБИРАЕМ about:blank ИЗ АДРЕСНОЙ СТРОКИ И ВКЛАДОК
-                if (string.IsNullOrEmpty(e.Url) || e.Url == "about:blank" || e.Url.StartsWith("file://"))
+                if (ShouldSkipUrl(e.Url))
                 {
-                    UrlEntry.Text = ""; // Очищаем адресную строку
-                    _currentTab.TitleLabel.Text = "Новая вкладка"; // Красивое название вкладки
-                    return; // ⛔ ВЫХОДИМ, чтобы не сохранять эту пустоту в историю на сервер!
+                    UrlEntry.Text = string.Empty;
+                    _currentTab.TitleLabel.Text = "Новая вкладка";
+                    return;
                 }
 
-                // Если это нормальный сайт - показываем его адрес
                 UrlEntry.Text = e.Url;
 
                 try
                 {
-                    Uri uri = new Uri(e.Url);
-                    _currentTab.TitleLabel.Text = uri.Host.Replace("www.", "");
+                    var uri = new Uri(e.Url);
+                    _currentTab.TitleLabel.Text = uri.Host.Replace("www.", string.Empty, StringComparison.OrdinalIgnoreCase);
                 }
-                catch { _currentTab.TitleLabel.Text = "Сайт"; }
+                catch
+                {
+                    _currentTab.TitleLabel.Text = "Сайт";
+                }
             }
 
-            // --- СОХРАНЕНИЕ В ИСТОРИЮ (сработает только для реальных сайтов) ---
-            var historyData = new { UserId = 1, Url = e.Url, Title = "Вкладка" };
-            var json = JsonSerializer.Serialize(historyData);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            if (_isIncognito || !_currentUserId.HasValue || string.IsNullOrWhiteSpace(e.Url))
+            {
+                return;
+            }
+
+            var historyData = new
+            {
+                userId = _currentUserId.Value,
+                url = e.Url,
+                title = _currentTab?.TitleLabel.Text ?? "Сайт"
+            };
 
             try
             {
-                var response = await _httpClient.PostAsync($"{ApiBaseUrl}/api/browser/history", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    string error = await response.Content.ReadAsStringAsync();
-                    System.Diagnostics.Debug.WriteLine($"❌ ОШИБКА СЕРВЕРА: {response.StatusCode} - {error}");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("✅ ИСТОРИЯ СОХРАНЕНА!");
-                }
+                string json = JsonSerializer.Serialize(historyData);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                await _httpClient.PostAsync($"{ApiBaseUrl}/api/history", content);
             }
-            catch (Exception ex)
+            catch
             {
-                System.Diagnostics.Debug.WriteLine($"❌ ОШИБКА СЕТИ: {ex.Message}");
+                // Игнорируем сетевые ошибки истории
             }
         }
 
         private async void OnHistoryButtonClicked(object sender, EventArgs e)
         {
-            var historyPage = new HistoryPage(ApiBaseUrl);
-            historyPage.UrlSelected += (s, url) =>
+            var historyPage = new HistoryPage(ApiBaseUrl, _currentUserId, _isIncognito);
+            historyPage.UrlSelected += (_, url) =>
             {
                 UrlEntry.Text = url;
                 if (_currentTab != null)
                 {
-                    /*StartPageLogo.IsVisible = false;*/ // Прячем вывеску, если переходим из истории
+                    StartPageLogo.IsVisible = false;
                     _currentTab.Browser.Source = url;
+                    _currentTab.Browser.IsVisible = true;
                 }
             };
+
             await Navigation.PushModalAsync(historyPage);
         }
 
@@ -298,23 +443,226 @@ namespace CrossPlatformBrowser
 
         private async void OnMenuButtonClicked(object sender, EventArgs e)
         {
-            string action = await DisplayActionSheet("Меню браузера", "Отмена", null, "🕒 История", "⚙️ Настройки");
+            string incognitoItem = _isIncognito ? "Инкогнито: Вкл" : "Инкогнито: Выкл";
+            string action = await DisplayActionSheet(
+                $"Меню ({_currentUsername})",
+                "Отмена",
+                null,
+                "Регистрация",
+                "Войти",
+                "Выйти",
+                incognitoItem,
+                "История",
+                "Настройки");
 
-            if (action == "🕒 История")
+            switch (action)
             {
-                OnHistoryButtonClicked(this, EventArgs.Empty);
+                case "Регистрация":
+                    await RegisterAsync();
+                    break;
+                case "Войти":
+                    await LoginAsync();
+                    break;
+                case "Выйти":
+                    await LogoutAsync();
+                    break;
+                case "История":
+                    OnHistoryButtonClicked(sender, e);
+                    break;
+                case "Настройки":
+                    OnSettingsButtonClicked(sender, e);
+                    break;
+                case "Инкогнито: Вкл":
+                case "Инкогнито: Выкл":
+                    _isIncognito = !_isIncognito;
+                    await DisplayAlert("Режим инкогнито", _isIncognito ? "Включен" : "Выключен", "ОК");
+                    break;
             }
-            else if (action == "⚙️ Настройки")
+        }
+
+        private async Task RegisterAsync()
+        {
+            string username = await DisplayPromptAsync("Регистрация", "Введите имя пользователя:");
+            if (string.IsNullOrWhiteSpace(username))
             {
-                OnSettingsButtonClicked(this, EventArgs.Empty);
+                return;
             }
+
+            string password = await DisplayPromptAsync("Регистрация", "Введите пароль:", "ОК", "Отмена", "", maxLength: 100, keyboard: Keyboard.Default);
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                return;
+            }
+
+            var payload = new
+            {
+                username,
+                password,
+                deviceId = DeviceInfo.Name
+            };
+
+            var auth = await SendAuthRequestAsync("/api/auth/register", payload);
+            if (auth.UserId.HasValue)
+            {
+                _currentUserId = auth.UserId;
+                _currentUsername = username;
+                await DisplayAlert("Успех", "Регистрация выполнена.", "ОК");
+                return;
+            }
+
+            await DisplayAlert("Ошибка", auth.ErrorMessage ?? "Не удалось зарегистрироваться.", "ОК");
+        }
+
+        private async Task LoginAsync()
+        {
+            string username = await DisplayPromptAsync("Вход", "Введите имя пользователя:");
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return;
+            }
+
+            string password = await DisplayPromptAsync("Вход", "Введите пароль:", "ОК", "Отмена", "", maxLength: 100, keyboard: Keyboard.Default);
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                return;
+            }
+
+            var payload = new
+            {
+                username,
+                password,
+                deviceId = DeviceInfo.Name
+            };
+
+            var auth = await SendAuthRequestAsync("/api/auth/login", payload);
+            if (auth.UserId.HasValue)
+            {
+                _currentUserId = auth.UserId;
+                _currentUsername = username;
+                await DisplayAlert("Успех", "Вход выполнен.", "ОК");
+                return;
+            }
+
+            await DisplayAlert("Ошибка", auth.ErrorMessage ?? "Не удалось войти.", "ОК");
+        }
+
+        private async Task LogoutAsync()
+        {
+            int? previousUserId = _currentUserId;
+
+            try
+            {
+                if (previousUserId.HasValue)
+                {
+                    string json = JsonSerializer.Serialize(new { userId = previousUserId.Value });
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    await _httpClient.PostAsync($"{ApiBaseUrl}/api/auth/logout", content);
+                }
+            }
+            catch
+            {
+                // Игнорируем сетевую ошибку на logout
+            }
+
+            _currentUserId = null;
+            _currentUsername = "Гость";
+            await DisplayAlert("Выход", "Вы вошли в гостевой режим.", "ОК");
+        }
+
+        private async Task<AuthResult> SendAuthRequestAsync(string route, object payload)
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync($"{ApiBaseUrl}{route}", content);
+                string body = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new AuthResult { ErrorMessage = string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase : body };
+                }
+
+                int? userId = ExtractUserId(body);
+                return new AuthResult { UserId = userId };
+            }
+            catch (Exception ex)
+            {
+                return new AuthResult { ErrorMessage = ex.Message };
+            }
+        }
+
+        private int? ExtractUserId(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+
+                if (document.RootElement.ValueKind == JsonValueKind.Number && document.RootElement.TryGetInt32(out int rootUserId))
+                {
+                    return rootUserId;
+                }
+
+                if (document.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var property in document.RootElement.EnumerateObject())
+                    {
+                        if (!string.Equals(property.Name, "userId", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(property.Name, "id", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt32(out int userId))
+                        {
+                            return userId;
+                        }
+
+                        if (property.Value.ValueKind == JsonValueKind.String && int.TryParse(property.Value.GetString(), out userId))
+                        {
+                            return userId;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return null;
+            }
+
+            return null;
         }
     }
 
     public class TabItem
     {
-        public Frame TabContainer { get; set; }
-        public Label TitleLabel { get; set; }
-        public WebView Browser { get; set; }
+        public required Frame TabContainer { get; set; }
+        public required Label TitleLabel { get; set; }
+        public required WebView Browser { get; set; }
+    }
+
+    public class SiteRuleResult
+    {
+        public bool IsBlocked { get; private init; }
+        public string Message { get; private init; } = "Переход на этот сайт заблокирован правилами.";
+
+        public static SiteRuleResult Allowed() => new() { IsBlocked = false };
+
+        public static SiteRuleResult Blocked(string message) => new()
+        {
+            IsBlocked = true,
+            Message = string.IsNullOrWhiteSpace(message) ? "Переход на этот сайт заблокирован правилами." : message
+        };
+    }
+
+    public class AuthResult
+    {
+        public int? UserId { get; init; }
+        public string? ErrorMessage { get; init; }
     }
 }

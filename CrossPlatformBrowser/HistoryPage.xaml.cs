@@ -5,33 +5,57 @@ namespace CrossPlatformBrowser
     public partial class HistoryPage : ContentPage
     {
         private readonly string _apiUrl;
+        private readonly int? _userId;
+        private readonly bool _isIncognito;
         private readonly HttpClient _httpClient;
+        private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-        // Создаем событие, которое "крикнет" главной странице: "Эй, я выбрал URL!"
-        public event EventHandler<string> UrlSelected;
+        public event EventHandler<string>? UrlSelected;
 
-        public HistoryPage(string apiUrl)
+        public HistoryPage(string apiUrl, int? userId, bool isIncognito)
         {
             InitializeComponent();
             _apiUrl = apiUrl;
-
+            _userId = userId;
+            _isIncognito = isIncognito;
             _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("X-Tunnel-Skip-AntiPhishing-Page", "true");
 
-            LoadHistory();
+            _ = LoadHistoryAsync();
         }
 
-        private async void LoadHistory()
+        private async Task LoadHistoryAsync()
         {
+            HistoryListView.ItemsSource = Array.Empty<HistoryItem>();
+
+            if (_isIncognito)
+            {
+                InfoLabel.Text = "В режиме инкогнито серверная история не синхронизируется.";
+                return;
+            }
+
+            if (!_userId.HasValue)
+            {
+                InfoLabel.Text = "Войдите в аккаунт, чтобы просматривать серверную историю.";
+                return;
+            }
+
             try
             {
-                var response = await _httpClient.GetStringAsync($"{_apiUrl}/api/browser/history");
-                var historyItems = JsonSerializer.Deserialize<List<HistoryItem>>(response, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var response = await _httpClient.GetAsync($"{_apiUrl}/api/history/{_userId.Value}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    InfoLabel.Text = "Не удалось загрузить историю.";
+                    return;
+                }
+
+                string json = await response.Content.ReadAsStringAsync();
+                var historyItems = JsonSerializer.Deserialize<List<HistoryItem>>(json, _jsonOptions) ?? [];
                 HistoryListView.ItemsSource = historyItems;
+                InfoLabel.Text = historyItems.Count == 0 ? "История пуста." : string.Empty;
             }
             catch (Exception ex)
             {
-                await DisplayAlert("Ошибка", $"Не удалось загрузить историю: {ex.Message}", "ОК");
+                InfoLabel.Text = $"Ошибка загрузки истории: {ex.Message}";
             }
         }
 
@@ -40,27 +64,61 @@ namespace CrossPlatformBrowser
             await Navigation.PopModalAsync();
         }
 
-        // НОВЫЙ МЕТОД: Срабатывает при клике на элемент списка
+        private async void OnClearButtonClicked(object sender, EventArgs e)
+        {
+            if (_isIncognito)
+            {
+                await DisplayAlert("Инкогнито", "В режиме инкогнито история не синхронизируется.", "ОК");
+                return;
+            }
+
+            if (!_userId.HasValue)
+            {
+                await DisplayAlert("История", "Войдите в аккаунт, чтобы очищать историю.", "ОК");
+                return;
+            }
+
+            bool confirm = await DisplayAlert("Очистить историю", "Удалить всю серверную историю?", "Да", "Нет");
+            if (!confirm)
+            {
+                return;
+            }
+
+            try
+            {
+                var response = await _httpClient.DeleteAsync($"{_apiUrl}/api/history/{_userId.Value}");
+                if (response.IsSuccessStatusCode)
+                {
+                    await LoadHistoryAsync();
+                    await DisplayAlert("Готово", "История очищена.", "ОК");
+                    return;
+                }
+
+                await DisplayAlert("Ошибка", "Не удалось очистить историю.", "ОК");
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Ошибка", ex.Message, "ОК");
+            }
+        }
+
         private async void OnHistoryItemSelected(object sender, SelectionChangedEventArgs e)
         {
-            // Проверяем, что кликнули на элемент списка
-            if (e.CurrentSelection.FirstOrDefault() is HistoryItem selectedItem)
+            if (e.CurrentSelection.FirstOrDefault() is not HistoryItem selectedItem)
             {
-                // Снимаем выделение (чтобы не оставалось серым)
-                HistoryListView.SelectedItem = null;
-
-                // Вызываем наше событие и передаем выбранный URL
-                UrlSelected?.Invoke(this, selectedItem.Url);
-
-                // Закрываем окно истории
-                await Navigation.PopModalAsync();
+                return;
             }
+
+            HistoryListView.SelectedItem = null;
+            UrlSelected?.Invoke(this, selectedItem.Url);
+            await Navigation.PopModalAsync();
         }
     }
 
     public class HistoryItem
     {
-        public string Url { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public string Title { get; set; } = "Сайт";
         public DateTime VisitedAt { get; set; }
     }
 }
