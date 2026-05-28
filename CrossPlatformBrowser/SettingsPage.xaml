@@ -5,32 +5,29 @@
              Title="Настройки"
              BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
 
-    <VerticalStackLayout Padding="20" Spacing="20">
+    <VerticalStackLayout Padding="20" Spacing="16">
 
         <Grid ColumnDefinitions="*, Auto">
             <Label Text="Настройки браузера" FontSize="24" FontAttributes="Bold" />
             <Button Grid.Column="1" Text="Закрыть" Clicked="OnCloseButtonClicked" />
         </Grid>
 
-        <!-- Выбор темы -->
-        <Label Text="Тема оформления:" FontSize="16" FontAttributes="Bold" Margin="0,10,0,0"/>
-        <Picker x:Name="ThemePicker" SelectedIndexChanged="OnThemeChanged">
-            <Picker.Items>
-                <x:String>Системная</x:String>
-                <x:String>Светлая</x:String>
-                <x:String>Темная</x:String>
-            </Picker.Items>
-        </Picker>
+        <Label Text="Домашняя страница" FontSize="16" FontAttributes="Bold" />
+        <Entry x:Name="HomePageEntry" Placeholder="Например: https://example.com" />
 
-        <!-- Выбор поисковика -->
-        <Label Text="Поисковая система:" FontSize="16" FontAttributes="Bold" Margin="0,10,0,0"/>
-        <Picker x:Name="SearchEnginePicker" SelectedIndexChanged="OnSearchEngineChanged">
+        <Label Text="Поисковая система" FontSize="16" FontAttributes="Bold" />
+        <Picker x:Name="SearchEnginePicker">
             <Picker.Items>
                 <x:String>Google</x:String>
                 <x:String>Яндекс</x:String>
                 <x:String>Bing</x:String>
             </Picker.Items>
         </Picker>
+
+        <HorizontalStackLayout Spacing="10">
+            <Label Text="Тёмная тема" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+            <Switch x:Name="DarkModeSwitch" VerticalOptions="Center" />
+        </HorizontalStackLayout>
 
     </VerticalStackLayout>
 </ContentPage>

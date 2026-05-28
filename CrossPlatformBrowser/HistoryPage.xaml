@@ -5,23 +5,25 @@
              Title="История посещений"
              BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
 
-    <Grid RowDefinitions="Auto, *" Padding="10">
+    <Grid RowDefinitions="Auto, Auto, *" Padding="10">
 
-        <!-- Верхняя панель -->
-        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,10">
+        <Grid Grid.Row="0" ColumnDefinitions="*, Auto, Auto" Margin="0,0,0,10">
             <Label Text="История посещений" FontSize="24" FontAttributes="Bold" VerticalOptions="Center" />
-            <Button Grid.Column="1" Text="Закрыть" Clicked="OnCloseButtonClicked" />
+            <Button Grid.Column="1" Text="Очистить" Clicked="OnClearButtonClicked" Margin="0,0,8,0" />
+            <Button Grid.Column="2" Text="Закрыть" Clicked="OnCloseButtonClicked" />
         </Grid>
 
-        <!-- Список истории -->
-        <CollectionView x:Name="HistoryListView" 
-                        Grid.Row="1" 
-                        SelectionMode="Single" 
+        <Label x:Name="InfoLabel" Grid.Row="1" FontSize="13" TextColor="Gray" Margin="0,0,0,8" />
+
+        <CollectionView x:Name="HistoryListView"
+                        Grid.Row="2"
+                        SelectionMode="Single"
                         SelectionChanged="OnHistoryItemSelected">
             <CollectionView.ItemTemplate>
                 <DataTemplate>
                     <VerticalStackLayout Padding="10" Margin="0,0,0,5" BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#2D2D2D}">
-                        <Label Text="{Binding Url}" FontSize="16" FontAttributes="Bold" TextColor="#0066CC" />
+                        <Label Text="{Binding Title}" FontSize="15" FontAttributes="Bold" />
+                        <Label Text="{Binding Url}" FontSize="14" TextColor="#0066CC" />
                         <Label Text="{Binding VisitedAt}" FontSize="12" TextColor="Gray" />
                     </VerticalStackLayout>
                 </DataTemplate>
